@@ -2,20 +2,16 @@
 #include "misc.h"
 #include "types.h"
 #include "tcp.h"
-#include "capturer.h"
-#include "parser.h"
-/* prototype of the packet handler */
-void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_char* pkt_data);
-
+#define DEFAULT_HEAP_SIZE 512
 int main()
 {
-	filter::PCAP_FILTER filter;
+	bpf_program fcode;
+	pcap_t* adhandle;
 	pcap_if_t* alldevs;
 	pcap_if_t* d;
 	u_int netmask;
 	int inum;
 	int i = 0;
-	char opts[20] = "tcp and udp";
 	char errbuf[PCAP_ERRBUF_SIZE];
 	/* Load Npcap and its functions. */
 	if (!LoadNpcapDlls())
@@ -61,48 +57,80 @@ int main()
 	/* Jump to the selected adapter */
 	for (d = alldevs, i = 0; i < inum - 1; d = d->next, i++);
 
-	if (d->addresses != NULL)
-		/* Retrieve the mask of the first address of the interface */
-		netmask = ((struct sockaddr_in*)(d->addresses->netmask))->sin_addr.S_un.S_addr;
+	//assume all device is class C network
+	netmask = 0xffffff;
+
+	if (d != NULL && (adhandle = pcap_open(d->name, 65536, PCAP_OPENFLAG_PROMISCUOUS, 1000, NULL, errbuf)) != NULL)
+	{
+		printf("\nlistening on %s...\n", d->description);
+	}
 	else
-		/* If the interface is without addresses we suppose to be in a C class network */
-		netmask = 0xffffff;
+	{
+		printf("[**]failed to open the device\n");
+		return -1;
+	}
 
-	filter.netmask = netmask;
-	filter.filter_opts = (char*)opts;
+	if (pcap_compile(adhandle, &fcode, "tcp and ip", 1, netmask) < 0)
+	{
+		printf("[**]wrong filter syntax\n");
+		return -1;
+	}
 
-	TCPCapturer* captureDevice = new TCPCapturer();
-	
-	captureDevice->SetDevice(*(pcap_if_t*)d);
+	if (pcap_setfilter(adhandle, &fcode) < 0)
+	{
+		printf("[**]failed to set the filter on current device\n");
+		return -1;
+	}
 
-	TCPParser* parser = new TCPParser();
-
-	captureDevice->SetParser(parser);
-
-	printf("\nlistening on %s...\n", d->description);
 
 	/* At this point, we don't need any more the device list. Free it */
 	pcap_freealldevs(alldevs);
 
-	if (!captureDevice->BeginCapture(65536, PCAP_OPENFLAG_PROMISCUOUS, NULL, 1000, errbuf, TRUE, &filter))
+	int res, k;
+	tcp::MyTcpPacket parsed_packet;
+	pcap_pkthdr* header;
+	const u_char* pkt_data;
+	u_char* payload_copy;
+	/* Retrieve the packets */
+	if ((payload_copy = (u_char*)malloc(DEFAULT_HEAP_SIZE)) == NULL)
 	{
-		//capture failed
-		printf("[**] ERROR: %s\n", errbuf);
+		printf("[**] failed to allocate memory\n");
 		return -1;
 	}
+	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0)
+	{
+		if (res == 0)
+			/* Timeout elapsed */
+			continue;
+		parse_tcp_packet(&parsed_packet, pkt_data, header->len);
+		if (parsed_packet.payload != NULL)
+		{
+			if (parsed_packet.payload_size > DEFAULT_HEAP_SIZE
+				&& (payload_copy = (u_char*)realloc(payload_copy, parsed_packet.payload_size)) != NULL)
+			{
+				printf("[**] failed to realloc payload\n");
+				return -1;
+			}
+			memcpy(payload_copy, parsed_packet.payload, parsed_packet.payload_size);
+			printf("\n*******\n");
+			for (k = 0; k < parsed_packet.payload_size; k++)
+			{
+				printf("0x%02x ", payload_copy[k]);
+			}
+			printf("\n#######\n");
+		}
+		else
+		{
+			//pass
+		}
+	}
 
+	if (res == -1)
+	{
+		printf("Error reading the packets: %s\n", pcap_geterr(adhandle));
+		return -1;
+	}
 	return 0;
 }
 
-
-/* Callback function invoked by libpcap for every incoming packet */
-void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_char* pkt_data)
-{
-	static int i = 0;
-	types::TCP_PACKET packet;
-	parse_tcp_packet(&packet ,pkt_data, header->len); 
-	printf("Packet no. %d\n", i++);
-	printf("packet src port %d\n", ntohs(packet.tcp_header.src_port));
-	printf("packet dst port %d\n", packet.tcp_header.dest_port);
-}
 

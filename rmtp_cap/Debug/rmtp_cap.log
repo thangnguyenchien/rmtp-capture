@@ -1,2 +1,2 @@
 ﻿  rmtp_cap.cpp
-C:\Users\MININT-BT0CIVD-local\Desktop\laptrinhmang\rmtp\rmtp_cap\rmtp_cap.cpp(5,10): fatal error C1083: Cannot open include file: 'pcap.h': No such file or directory
+  rmtp_cap.vcxproj -> C:\Users\Admin\Desktop\C++ project\rmtp\Debug\rmtp_cap.exe

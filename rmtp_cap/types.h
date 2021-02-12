@@ -1,65 +1,77 @@
 #pragma once
 #include <pcap.h>
-//My own type define
-#define DATA_LINK_LAYER_OFFSET 14
-#define U_INT_SIZE sizeof(u_int)
-#define U_SHORT_SIZE sizeof(u_short)
-#define U_CHAR_SIZE sizeof(u_char)
-#define IP_ADDRESS_SIZE sizeof(ip_address)
-#define PCAP_HANDLER pcap_handler
-/* 4 bytes IP address */
-// byte1.byte2.byte3.byte4
-namespace types
+
+//source: https://www.tcpdump.org/pcap.html
+#define MINIMUM_IP_HEADER_SIZE 20
+#define MINIMUM_TCP_HEADER_SIZE MINIMUM_IP_HEADER_SIZE
+
+namespace tcp
 {
+	/* Ethernet addresses are 6 bytes */
+#define ETHER_ADDR_LEN	6
 
-	typedef struct ip_address {
-		u_char byte1;
-		u_char byte2;
-		u_char byte3;
-		u_char byte4;
-	}IP_ADDRESS, * P_IP_ADDRESSS;
+	/* Ethernet header */
+	struct ethernet_header {
+		u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+		u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+		u_short ether_type; /* IP? ARP? RARP? etc */
+	};
 
-	/* IPv4 header */
-	typedef struct ip_header {
-		u_char	ver_ihl;		// Version (4 bits) + Internet header length (4 bits)
-		u_char	tos;			// Type of service 
-		u_short tlen;			// Total length 
-		u_short identification; // Identification
-		u_short flags_fo;		// Flags (3 bits) + Fragment offset (13 bits)
-		u_char	ttl;			// Time to live
-		u_char	proto;			// Protocol
-		u_short crc;			// Header checksum
-		ip_address	saddr;		// Source address
-		ip_address	daddr;		// Destination address
-		u_int	op_pad;			// Option + Padding
-	}IP_HEADER, * P_IP_HEADER;
+	/* IP header */
+	struct ip_header {
+		u_char ip_vhl;		/* version << 4 | header length >> 2 */
+		u_char ip_tos;		/* type of service */
+		u_short ip_len;		/* total length */
+		u_short ip_id;		/* identification */
+		u_short ip_off;		/* fragment offset field */
+#define IP_RF 0x8000		/* reserved fragment flag */
+#define IP_DF 0x4000		/* don't fragment flag */
+#define IP_MF 0x2000		/* more fragments flag */
+#define IP_OFFMASK 0x1fff	/* mask for fragmenting bits */
+		u_char ip_ttl;		/* time to live */
+		u_char ip_p;		/* protocol */
+		u_short ip_sum;		/* checksum */
+		struct in_addr ip_src, ip_dst; /* source and dest address */
+	};
+#define IP_HL(ip)		(((ip)->ip_vhl) & 0x0f)
+#define IP_V(ip)		(((ip)->ip_vhl) >> 4)
 
-	/* UDP header*/
-	typedef struct udp_header {
-		u_short sport;			// Source port
-		u_short dport;			// Destination port
-		u_short len;			// Datagram length
-		u_short crc;			// Checksum
-	}UDP_HEADER, * P_UDP_HEADER;
+	/* TCP header */
+	typedef u_int tcp_seq;
 
-	/* My TCP header*/
-	typedef struct tcp_header {
-		u_short dest_port;
-		u_short src_port;
-		u_int seq_number;
-		u_int header_len;
-		u_char data_offset;
-		u_char revserve_flag[3];
-		u_short window;
-		u_short urgent_ptr;
-	} TCP_HEADER, * P_TCP_HEADER;
+	struct tcp_header {
+		u_short th_sport;	/* source port */
+		u_short th_dport;	/* destination port */
+		tcp_seq th_seq;		/* sequence number */
+		tcp_seq th_ack;		/* acknowledgement number */
+		u_char th_offx2;	/* data offset, rsvd */
+#define TH_OFF(th)	(((th)->th_offx2 & 0xf0) >> 4)
+		u_char th_flags;
+#define TH_FIN 0x01
+#define TH_SYN 0x02
+#define TH_RST 0x04
+#define TH_PUSH 0x08
+#define TH_ACK 0x10
+#define TH_URG 0x20
+#define TH_ECE 0x40
+#define TH_CWR 0x80
+#define TH_FLAGS (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
+		u_short th_win;		/* window */
+		u_short th_sum;		/* checksum */
+		u_short th_urp;		/* urgent pointer */
+	};
 
-	typedef struct tcp_packet {
-		IP_HEADER ip_header;
-		TCP_HEADER tcp_header;
-		u_char* opt;
-		u_char* data;
-	}TCP_PACKET, * P_TCP_PACKET;
+	struct MyTcpPacket
+	{
+		struct ethernet_header* p_ether_header;
+#define ETHERNET_HEADER_SIZE 14
+		struct ip_header* p_ip_header;
+		int ip_header_size;
+		struct tcp_header* p_tcp_header;
+		int tcp_header_size;
+		u_char* payload;
+		int payload_size;
+	};
 
 };
 
@@ -71,10 +83,4 @@ namespace filter
 		int netmask;
 		char* filter_opts;
 	} PCAP_FILTER;
-	enum FilterType
-	{
-		TCP_DUMP,
-		UDP_DUMP,
-		BOTH_TCP_UDP
-	};
 };
