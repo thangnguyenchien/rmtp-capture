@@ -1,0 +1,4 @@
+﻿  tcp.cpp
+C:\Users\Admin\Desktop\C++ project\rmtp\rtmp_cap\tcp.cpp(173,16): warning C4018: '<': signed/unsigned mismatch
+C:\Users\Admin\Desktop\C++ project\rmtp\rtmp_cap\tcp.cpp(189,16): warning C4018: '<': signed/unsigned mismatch
+  rtmp_cap.vcxproj -> C:\Users\Admin\Desktop\C++ project\rmtp\Debug\rtmp_cap.exe
